@@ -1,0 +1,101 @@
+---
+title: "Tarea 2"
+author: "Sonya Leilany Lorea Aguilera"
+date: '2025'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tidyverse)
+library(discrtr)
+library(mlogit)
+library(readr) 
+library(gplots) 
+library(ggmosaic) 
+library(treemapify)
+library(ggridges)
+library(ggalluvial)
+library(plotly)
+```
+
+Se carga el conjunto de datos, se muestran las variables y su tipo:
+
+```{r}
+data(Car)
+glimpse(Car)
+```
+
+En este caso es necesario añadir columnas acerca de la elección, las gráficas se realizarán con la data frame `new_car`:
+
+```{r}
+new_car <- Car
+choice_char <- gsub("choice","", new_car$choice)
+new_car <- new_car |> mutate(choice_char = choice_char)
+
+type <- vector("character", nrow(new_car))
+fuel <- vector("character", nrow(new_car))
+price <- vector("numeric", nrow(new_car))
+range <- vector("numeric", nrow(new_car))
+acc <- vector("numeric", nrow(new_car))
+speed <- vector("numeric", nrow(new_car))
+pollution <- vector("numeric", nrow(new_car))
+size <- vector("numeric", nrow(new_car))
+space <- vector("numeric", nrow(new_car))
+cost <- vector("numeric", nrow(new_car))
+station <- vector("numeric", nrow(new_car))
+for (i in 1:nrow(new_car)) {
+  type[i] <- as.character(new_car[i, paste0("type", new_car$choice_char[i], collapse = "")])
+  fuel[i] <- as.character(new_car[i, paste0("fuel", new_car$choice_char[i], collapse = "")])
+  price[i] <- new_car[i, paste0("price", new_car$choice_char[i], collapse = "")]
+  range[i] <- new_car[i, paste0("range", new_car$choice_char[i], collapse = "")]
+  acc[i] <- new_car[i, paste0("acc", new_car$choice_char[i], collapse = "")]
+  speed[i] <- new_car[i, paste0("speed", new_car$choice_char[i], collapse = "")]
+  pollution[i] <- new_car[i, paste0("pollution", new_car$choice_char[i], collapse = "")]
+  size[i] <- new_car[i, paste0("size", new_car$choice_char[i], collapse = "")]
+  space[i] <- new_car[i, paste0("space", new_car$choice_char[i], collapse = "")]
+  cost[i] <- new_car[i, paste0("cost", new_car$choice_char[i], collapse = "")]
+  station[i] <- new_car[i, paste0("station", new_car$choice_char[i], collapse = "")]
+}
+
+new_car <- new_car |> mutate(choice_num= factor(choice_char), type=type, fuel=fuel, price=price, range=range,
+                             acc=acc, speed=speed, pollution=pollution, size=size, space=space, cost=cost,
+                             station=station)
+
+new_car$type <- factor(new_car$type, levels = levels(new_car$type1))
+new_car$fuel <- factor(new_car$fuel, levels = levels(new_car$fuel1))
+```
+
+* How many variables are there in this data set and of which type (i.e., categorical/quantitative)?
+Variables categoricas: Todas las demás
+Variables cuantitativas: precio, velocidad y pollution
+
+* Choose four relevant categorical variables from this data set and describe them using univariate, bivariate, and multivariate techniques. Discuss your results.
+
+```{r}
+new_car |> ggplot(aes(x = fuel)) + 
+  geom_bar(color = "black", fill = "white") + 
+  labs(x = "Tipo de vehiculos", y = "Number of respondents")
+```
+
+```{r}
+new_car |> group_by(fuel,type) |> 
+  summarize(n = n(), .groups = "drop") |> 
+  ggplot(aes(x = fuel, y = type)) +
+  geom_tile(aes(fill = n)) +
+  labs(x = "fuel", y = "type", fill = "Number of respondents")
+```
+
+
+```{r}
+new_car |>  ggplot(aes(x = type, y = speed, fill = type)) +
+  geom_violin(trim = TRUE) +
+  geom_boxplot(width = 0.1, fill = "white") + 
+  labs(x="type", y = expression("speed"), fill = "Mode")
+```
+
+
+* What ideas about individuals’ choices regarding car do you develop from this EDA exercise?
+Hay una mayor cantidad de personas que tienen vehiculos electricos.
+
