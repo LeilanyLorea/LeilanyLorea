@@ -1,0 +1,96 @@
+---
+title: "Tarea 4. Capitulo 5: Practical Issues in the Specification and estimation of discrete choice models"
+author: "Sonya Leilany Lorea Aguilera"
+date: "2025"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tidyverse)
+library(discrtr)
+library(dplyr)
+library(ggplot2)
+library(mlogit)
+library(readr)
+#library(stargazer)
+library(gplots)
+library(ggmosaic)
+library(treemapify)
+library(ggridges)
+library(ggalluvial)
+library(evd)
+library(htmlwidgets)
+library(kableExtra)
+library(plotly)
+library(tidyr)
+```
+
+Tarea 4. Ejercicios del Capítulo 5 Practical Issues in the Specification and Estimation of Discrete Choice Models. Considerar como referencia las notas del respectivo capítulo.
+
+```{r}
+data("mc_commute_wide",
+package = "discrtr")
+```
+
+
+1. En el ejemplo de este capítulo estimamos las probabilidades de elegir diferentes modos según la densidad de banquetas, estableciendo el tiempo de viaje en la mediana de la muestra. Utiliza el modelo 12 para calcular la probabilidad de elegir diferentes modos según la mediana de la densidad de banquetas de la muestra, pero ahora para tiempos de viaje de 20, 30 y 40 minutos. Discute los resultados.
+
+```{r}
+mc_commute_wide[1:6, 1:10]
+
+f2 <- mFormula(choice ~ time | sidewalk_density)
+
+mc_commute_long <- mc_commute_wide |> 
+mlogit.data(shape="wide",
+            choice = "choice",
+            varying = 3:22)
+
+model2 <- mlogit(f2, mc_commute_long)
+
+mc_commute_predict <- mc_commute_long[1:12, ]
+mc_commute_predict$time <- rep(seq(from=20, to=40, by=10), each=1)
+probs <- predict(model2, newdata=mc_commute_predict)
+print(probs)
+```
+Los resultados indican que conforme el tiempo de viaje aumenta es menos probable decidir caminar, además parece haber una fuerte preferencia por caminar antes que elegir otros métodos de transporte dado que en el caso 1, la probabilidad de elegir caminar es del 90%, en el 2 del 87%, en el 3 del 65%
+
+2. Estima un modelo usando la fórmula f3 (llámalo modelo 3). Discute los resultados de este modelo.
+
+```{r}
+f3<-mFormula(choice~0|sidewalk_density|time)
+model3 <- mlogit(f3, mc_commute_long)
+summary(model3)
+```
+Con este modelo se manifiesta una mayor significancia para el tiempo de viaje de cada modo.
+
+3. Usa el modelo 3 para calcular la probabilidad de elegir diferentes modos según la mediana de la densidad de banquetas de la muestra, pero ahora para tiempos de viaje de 20, 30 y 40 minutos. Discute los resultados.
+
+```{r}
+mc_commute_predict <- mc_commute_long[1:12, ]
+mc_commute_predict$time <- rep(seq(from=20, to=40, by=10), each=1)
+probs <- predict(model3, newdata=mc_commute_predict)
+print(probs)
+```
+
+En el caso del modelo 3, parece haber mucha mayor preferencia por utilizar bicicleta antes que otros métodos, aunque parece que conforme el tiempo de viaje aumenta, la probabilidad de escoger un carro es significativamente mayor y de escoger bicicleta significativamente menor
+
+
+4. En el caso general, ¿cuál es el valor de la log-verosimilitud (likelihood) del modelo nulo (Igualmente Probable)?
+
+```{r}
+f0 <- mFormula(choice ~ 1)
+model0 <- mlogit(f0, mc_commute_long)
+summary(model0)
+```
+Log-Likelihood: -1547.2
+
+5. Usa la prueba de razón de verosimilitud para comparar el modelo3 con el modelo2. Discute los resultados. ¿Qué restricciones necesitarías imponer en el modelo3 para obtener el modelo2?
+```{r}
+lrtest(model2, model3)
+```
+
+Con base en los resultados, el model3 esmucho más significativo con respecto al model2, es decir es un modelo más confiable y efectivo para el análisis de esta base de datos
+
+
