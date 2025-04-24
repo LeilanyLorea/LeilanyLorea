@@ -1,0 +1,105 @@
+---
+title: "Tarea 5"
+author: "Sonya Leilany Lorea Aguilera"
+date: '2025'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tidyverse)
+library(discrtr)
+library(dplyr)
+library(ggplot2)
+library(mlogit)
+library(readr)
+library(gplots)
+library(ggmosaic)
+library(treemapify)
+library(ggridges)
+library(ggalluvial)
+library(evd)
+library(htmlwidgets)
+library(kableExtra)
+library(plotly)
+library(tidyr)
+library(evd)
+```
+
+```{r}
+data("Heating")
+glimpse(Heating)
+model3 <- mlogit(depvar ~ ic + oc, Heating, shape = "wide", choice = "depvar", reflevel = "ec", varying = c(3:12))
+ic_min <- Heating[1, ]
+ic_mean <- Heating[1, ]
+ic_max <- Heating[1, ]
+min_cost <- Heating %>% select(starts_with("ic")) %>%
+                        summarise(across(.cols = everything(), min))
+
+mean_cost <- Heating %>% select(starts_with("ic")) %>%
+             summarise(across(.cols = everything(), mean))
+
+max_cost <- Heating %>% select(starts_with("ic")) %>%  
+                        summarise(across(.cols = everything(), max))
+ic_mean[3:12] <- mean_cost
+```
+
+
+1. What is the difference between a marginal effect and an elasticity?
+La elasticidad mide los cambios de una variable dependiente con respecto en los cambios porcentuales de otra variable, mientras que el efecto marginal mide los cambios de una variable con respecto a los cambios en una unidad de la otra variable. Es decir la elasticidad mide el cambio porcentual y el cambio marginal es en unidades.
+ 
+2. Why is it inappropriate to calculate the elasticity of a dummy variable?
+Las variables dummy son una forma de categorizar variables que generalmente solo tienen dos alternativa de respuesta, como sí/no, género, etc, se les suele asignar un valor de 1 y 0, por tanto no tienen una escala continua y no tendría sentido calcular cambios porcentuales entre variables.
+ 
+3. Use Model 3 in this chapter and calculate the marginal effects and the elasticities for operating cost at the mean of all variables.
+
+## Efectos marginales
+```{r}
+effects(model3, covariate = "ic", type = "ra", data = mlogit.data(ic_mean, shape = "wide",
+        choice = "depvar", varying = 3:12))
+```
+## Elasticidad
+```{r}
+effects(model3, covariate = "ic", type = "rr", data = mlogit.data(ic_mean, shape = "wide",
+        choice = "depvar", varying = 3:12))
+```
+
+4. Use Model 3 in this chapter to calculate the rebate needed to reach a 10% penetration rate of heat pumps. Estimate a new model that extends Model 3 by introducing the age of the household head. Use the electric room system (“er”) as the reference level.
+ 
+```{r}
+H_rebate <- Heating %>% mutate(ic.er=0.947*ic.er)
+
+data.frame(Politica = c("Sin reembolso", "5.3% de descuento"),
+           rbind(apply(predict(model3, newdata = mlogit.data(Heating, shape = "wide", choice = "depvar",
+                       varying = c(3:12))), 2, mean),
+                 apply(predict(model3, newdata = mlogit.data(H_rebate, shape = "wide", choice = "depvar",
+                       varying = c(3:12))), 2, mean)))
+```
+Se requiere cerca de un 5.3% de descuento para lograr un 10% de penetración.
+
+```{r}
+H_rebate_agehed <- Heating %>% mutate(ic.er=0.946*ic.er)
+
+
+model4 <- mlogit(depvar ~ ic + oc | agehed, Heating, shape = "wide", choice = "depvar", reflevel = "ec", varying = c(3:12))
+
+
+data.frame(Politica = c("Sin reembolso", "5.4% de descuento"),
+           rbind(apply(predict(model4, newdata = mlogit.data(Heating, shape = "wide", choice = "depvar",
+                       varying = c(3:12))), 2, mean),
+                 apply(predict(model4, newdata = mlogit.data(H_rebate_agehed, shape = "wide", choice = "depvar",
+                       varying = c(3:12))), 2, mean)))
+```
+Se requiere cerca de un 5.4% de descuento para lograr un 10% de penetración.
+ 
+5. Use the likelihood ratio test to compare your new model to Model 3. Discuss the results.
+ 
+```{r}
+lrtest(model3, model4)
+```
+
+6. Is the ratio of the coefficient of installation (or operation) cost to the coefficient of age of household head meaningful? Explain.
+
+Con base en los resultados del likelihood ratio test, es significativo en 0.1, es decir, es poco significativo.
+
