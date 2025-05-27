@@ -1,0 +1,212 @@
+---
+title: "Tarea 6"
+author: "Sonya Leilany Lorea Aguilera"
+date: "2025-05-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(tidyverse)
+library(discrtr)
+library(dplyr)
+library(ggplot2)
+library(mlogit)
+library(readr)
+library(gplots)
+library(ggmosaic)
+library(treemapify)
+library(ggridges)
+library(ggalluvial)
+library(evd)
+library(htmlwidgets)
+library(kableExtra)
+library(plotly)
+library(tidyr)
+library(evd)
+```
+
+```{r}
+data("Heating", package = "mlogit")
+H <- mlogit.data(Heating, shape = "wide", choice = "depvar", varying = c(3:12))
+
+
+nl2 <- mlogit(depvar ~ ic + oc, H, nests = list(room = c( 'er', 'gr'), central = c('ec', 'gc', 'hp')), un.nest.el = TRUE, steptol = 1e-12)
+
+# copiar los primeros 5 elementos de la matriz y los índices 
+X_mean <- model.matrix(nl2)[1:5,]
+alt <- index(H)$alt[1:5]
+
+# calculo de promedio de costo de instalación
+mean_ic <- H %>% group_by(alt) %>% summarize(ic = mean(ic)) %>% arrange(alt)
+
+mean_oc <- H %>% group_by(alt) %>% summarize(oc = mean(oc)) %>% arrange(alt)
+
+# Reemplazo de medias en la matriz
+X_mean[,5] <- mean_ic$ic
+
+X_mean[,6] <- mean_oc$oc
+
+#Calculo de exponenciales de las funciones de utilidad
+# Electric central
+exp_V_ec <- exp((X_mean[alt == c("ec"), "oc"] * coef(nl2)["oc"] +
+            X_mean[alt == c("ec"), "ic"] * coef(nl2)["ic"]) / coef(nl2)["iv"])
+
+## Electric room
+exp_V_er <- exp((coef(nl2)["(Intercept):er"] + X_mean[alt == c("er"), "oc"] * coef(nl2)["oc"] +
+            X_mean[alt == c("er"), "ic"] * coef(nl2)["ic"]) / coef(nl2)["iv"])
+
+## Gas central
+exp_V_gc <- exp((coef(nl2)["(Intercept):gc"] + X_mean[alt == c("gc"), "oc"] * coef(nl2)["oc"] +
+            X_mean[alt == c("gc"), "ic"] * coef(nl2)["ic"]) / coef(nl2)["iv"])
+
+## Gas room
+exp_V_gr <- exp((coef(nl2)["(Intercept):gr"] + X_mean[alt == c("gr"), "oc"] * coef(nl2)["oc"] +
+            X_mean[alt == c("gr"), "ic"] * coef(nl2)["ic"]) / coef(nl2)["iv"])
+
+## Heat pump
+exp_V_hp <- exp((coef(nl2)["(Intercept):hp"] + X_mean[alt == c("hp"), "oc"] * coef(nl2)["oc"] +
+            X_mean[alt == c("hp"), "ic"] * coef(nl2)["ic"]) / coef(nl2)["iv"])
+
+# Probabilidades condicionales
+## Nido central 
+cp_c <- data.frame(ec = exp_V_ec / (exp_V_ec + exp_V_gc + exp_V_hp),
+                   gc = exp_V_gc / (exp_V_ec + exp_V_gc + exp_V_hp),
+                   hp = exp_V_hp / (exp_V_ec + exp_V_gc + exp_V_hp))
+
+# Nido de room
+cp_r <- data.frame(er = exp_V_er / (exp_V_er + exp_V_gr),
+                   gr = exp_V_gr / (exp_V_er + exp_V_gr))
+
+# Probabilidades logit
+## After removing ec
+mp <- data.frame(central = exp(coef(nl2)["iv"] * log(exp_V_ec + exp_V_gc + exp_V_hp))
+                          / (exp(coef(nl2)["iv"] * log(exp_V_ec + exp_V_gc + exp_V_hp)) +
+                          exp((coef(nl2)["iv"] * log(exp_V_er + exp_V_gr)))),
+                room = exp(coef(nl2)["iv"] * log(exp_V_er + exp_V_gr)) / (exp(coef(nl2)["iv"] * log(exp_V_gc + exp_V_hp)) +
+                      exp((coef(nl2)["iv"] * log(exp_V_er + exp_V_gr)))))
+
+```
+
+
+# Ejercicio 2
+Usa el modelo n12 en este capitulo y calcula la elasticidad del punto directo en los valores promedio de las variables, para el incremento de los costos de instalaciones del sistema de Gas Central
+
+
+```{r}
+nlp <- data.frame(system = c("ec", "er", "gc", "gr", "hp"), 
+                  # Probabilidad condicional
+                  cp = c(cp_c$ec, cp_r$er, cp_c$gc, cp_r$gr, cp_c$hp),
+                  # Probabilidad marginal
+                  mp = c(mp$central, mp$room, mp$central, mp$room, mp$central),
+                  beta_ic = c(as.numeric(nl2$coefficients["ic"])),
+                  beta_oc = c(as.numeric(nl2$coefficients["oc"])),
+                  lambda = c(as.numeric(nl2$coefficients["iv"]))) %>%
+
+  # Probabilidad conjunta
+mutate(p = cp * mp)
+
+# Calculo de elasticidad
+nlp <- cbind(nlp, X_mean[,5:6]) %>%
+# Increase installation cost 1%
+mutate(ic_1pct = 1.01 * ic)
+
+
+direct_elasticities <- nlp %>%
+                       transmute(elasticidad_marginal_directa = ((1 - mp) + (1 - cp) * (1 - lambda)/lambda) * beta_ic * ic)
+rownames(direct_elasticities) <- c("ec", "er", "gc", "gr", "hp")
+print(direct_elasticities)
+```
+Cada variable muestra ser negativamente elástica, es decir, el incremento de un punto porcentual de los costos de instalación para Gas Central, no mofica el valor promedio de las otras variables
+
+```{r}
+
+elasticities <- nlp %>%
+transmute(CEM_ec = -(mp + (1 - lambda)/lambda * cp) * beta_ic * mean_ic$ic[mean_ic == "ec"],
+CEM_er = -(mp + (1 - lambda)/lambda * cp) * beta_ic * mean_ic$ic[mean_ic == "er"],
+CEM_gc = -(mp + (1 - lambda)/lambda * cp) * beta_ic * mean_ic$ic[mean_ic == "gc"],
+CEM_gr = -(mp + (1 - lambda)/lambda * cp) * beta_ic * mean_ic$ic[mean_ic == "gr"],
+CEM_hp = -(mp + (1 - lambda)/lambda * cp) * beta_ic * mean_ic$ic[mean_ic == "hp"]) %>%
+# Transmute so that each row is the elasticity due to changes to a system
+t()
+diag(elasticities) <- direct_elasticities$elasticidad_marginal_directa
+
+
+colnames(elasticities) <- c("ec", "er", "gc", "gr", "hp")
+rownames(elasticities) <- c("CEM_ec", "CEM_er", "CEM_gc", "CEM_gr", "CEM_hp")
+print(elasticities)
+```
+
+
+
+# Ejercicio 3
+Usa el modelo n12 en este capitulo y calcula la elasticidad del punto directo en los valores promedio de las variables, para un 1% de incremento de los costos de operación del sistema de Gas Central
+
+```{r}
+nlp <- data.frame(system = c("ec", "er", "gc", "gr", "hp"), 
+                  # Probabilidad condicional
+                  cp = c(cp_c$ec, cp_r$er, cp_c$gc, cp_r$gr, cp_c$hp),
+                  # Probabilidad marginal
+                  mp = c(mp$central, mp$room, mp$central, mp$room, mp$central),
+                  beta_ic = c(as.numeric(nl2$coefficients["ic"])),
+                  beta_oc = c(as.numeric(nl2$coefficients["oc"])),
+                  lambda = c(as.numeric(nl2$coefficients["iv"]))) %>%
+
+  # Probabilidad conjunta
+mutate(p = cp * mp)
+
+#Calculo de elasticidad
+
+nlp_oc <- cbind(nlp, X_mean[,5:6]) %>%
+# Increase installation cost 1%
+  
+mutate(oc_1pct = 1.01 * oc)
+
+
+direct_elasticities_oc <- nlp_oc %>%
+                       transmute(elasticidad_marginal_directa = ((1 - mp) + (1 - cp) * (1 - lambda)/lambda) * beta_oc * oc)
+rownames(direct_elasticities_oc) <- c("ec", "er", "gc", "gr", "hp")
+print(direct_elasticities_oc)
+
+```
+Cada variable muestra ser negativamente elástica, es decir, el incremento de un punto porcentual de los costos de operación para Gas Central, no mofica el valor promedio de las otras variables
+
+```{r}
+#Elasticidades cruzadas 
+
+elasticities <- nlp %>%
+transmute(CEM_ec = -(mp + (1 - lambda)/lambda * cp) * beta_ic * mean_ic$ic[mean_ic == "ec"],
+CEM_er = -(mp + (1 - lambda)/lambda * cp) * beta_ic * mean_ic$ic[mean_ic == "er"],
+CEM_gc = -(mp + (1 - lambda)/lambda * cp) * beta_ic * mean_ic$ic[mean_ic == "gc"],
+CEM_gr = -(mp + (1 - lambda)/lambda * cp) * beta_ic * mean_ic$ic[mean_ic == "gr"],
+CEM_hp = -(mp + (1 - lambda)/lambda * cp) * beta_ic * mean_ic$ic[mean_ic == "hp"]) %>%
+# Transmute so that each row is the elasticity due to changes to a system
+t()
+diag(elasticities) <- direct_elasticities_oc$elasticidad_marginal_directa
+
+
+colnames(elasticities) <- c("ec", "er", "gc", "gr", "hp")
+rownames(elasticities) <- c("CEM_ec", "CEM_er", "CEM_gc", "CEM_gr", "CEM_hp")
+print(elasticities)
+```
+
+# Ejercicio 4
+Re-estima los nidos del modelo logit en este capitulo, pero cambia los nidos por la forma basada en tipos de energía, de la siguiente forma:
+Gas: Gas central, gas room
+Electricity: electric central, electric room, heat pump.
+
+Usa un solo coeficiente para las variables inclusivas (i.e., set un.nest.el = TRUE). ¿Los resultados son razonables? Analizalo.
+
+```{r}
+
+#definimos los nidos 'gas' y 'electric'
+
+nl3 <- mlogit(depvar ~ oc + ic, H, nests = list(gas=c('gc', 'gr'), electric = c('ec', 'er', 'hp')), un.nest.el = TRUE)
+
+summary(nl3)
+```
+Las variables 'operational cost' y 'installation cost' son las más significativas, además de tener un coeficiente cercano a cero. La variable heat pump también es altamente significativa y en menor significancia, también la variable gas room. Los coeficientes de las variables inclusivas son poco o nada significativas para este modelo anidado. Esto nos indica que el modelo es significativo y las variables que mayor confianza nos darán en predicciones son "gr", "hp", "oc", e "ic".
+
+
+
